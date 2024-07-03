@@ -81,10 +81,12 @@ def update_password() -> None:
     curr_password: str = ''
     if CREDENTIALS_EXIST:
         for i in range(3):
-            curr_password = typer.prompt(
-                'Enter current password',
-                hide_input=True
-            )
+            if i == 0:
+                prompt = 'Enter current password'
+            else:
+                prompt = f'Enter current password (Attempt {i+1} / 3)'
+
+            curr_password = typer.prompt(prompt, hide_input=True)
             cm = get_exisiting_cm(curr_password)
 
             if cm is not None:  # password validation success
@@ -101,13 +103,18 @@ def update_password() -> None:
         if not create:
             return
 
-    new_password = typer.prompt('Enter new password', hide_input=True)
+    while True:
+        new_password = typer.prompt('Enter new password', hide_input=True)
+        confirm = typer.prompt('Re-enter new password', hide_input=True)
+
+        if new_password == confirm:
+            break
+
+        console.print('Passwords do not match. Retry\n', style="bold red")
 
     if curr_password != '':  # Current pswd prompt would have updated this
-        print('Update')
         cm.update_password(curr_password, new_password)  # type: ignore[union-attr]
     else:
-        print('CREATE')
         cm = CredentialsManager(new_password)
 
     cm.save(CREDENTIALS_FILE)  # type: ignore[union-attr]
@@ -124,12 +131,16 @@ def delete_credentials() -> None:
     if not delete:
         raise typer.Abort()
 
-    pswd = typer.prompt('Enter your password', hide_input=True)
-
     for i in range(3):
+        if i == 0:
+            prompt = '\nEnter your password\n'
+        else:
+            prompt = f'\nEnter your password (Attempt {i+1} / 3)\n'
+
+        pswd = typer.prompt(prompt, hide_input=True)
+
         if get_exisiting_cm(pswd) is not None:
             # Password validation success
-
             # Delete credentials file
             os.unlink(str(CREDENTIALS_FILE))
             console.print('Credentials deleted successfully', style="bold green")
