@@ -4,8 +4,11 @@ import json
 import platform
 import secrets
 import struct
+import typer
 from functools import wraps
 from pathlib import Path
+from rich.console import Console
+from rich.progress import Progress
 from typing import Optional
 
 
@@ -355,22 +358,70 @@ class CredentialsManager:
         return obj
 
 
-def check_credentials():
-    """Check if credentials file exists."""
-    credentials_path = Path.home() / ".lazy-coder-credentials.json"
-    try:
-        with Path.open(credentials_path) as json_file:
-            return json.load(json_file)
-    except FileNotFoundError as err:
-        raise CredentialsNotFoundError(credentials_path) from err
+class PauseProgress:
+    """Adapted from https://stackoverflow.com/a/77110494"""
+    def __init__(self, progress: Optional[Progress]) -> None:
+        self._progress = progress
 
+    def _clear_line(self) -> None:
+        if self._progress is not None:
+            UP = "\x1b[1A"
+            CLEAR = "\x1b[2K"
+            for _ in self._progress.tasks:
+                print(UP + CLEAR + UP)
+
+    def __enter__(self):
+        if self._progress is not None:
+            self._progress.stop()
+            self._clear_line()
+            return self._progress
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        if self._progress is not None:
+            self._progress.start()
+
+manager: Optional[CredentialsManager] = None
 
 # Decorator that loads and provides credentials to the function
 # use funcools.wraps to preserve the function name and docstring
 def use_credentials(func):
     @wraps(func)
-    def wrapper(*args, **kwargs):
-        credentials = check_credentials()
-        return func(credentials, *args, **kwargs)
+    def wrapper(*args, **kwargs):  # type: ignore[misc]
+        global manager
+
+        # This block should be executed at most once, even if
+        # multiple wrapped functions require credentials
+        if manager is None:
+            # Lazy imports to avoid cyclic references
+            from lazycodr.cli.config import get_exisiting_cm
+
+            with PauseProgress(wrapper.pbar):  # type: ignore[attr-defined]
+                console = Console()
+                console.print('This operation requires credentials',
+                               style="bold yellow")
+
+                for i in range(3):
+                    if i == 0:
+                        prompt = 'Enter your password'
+                    else:
+                        prompt = f'Enter your password (Attempt {i+1} / 3)'
+
+                    pswd = typer.prompt(prompt, hide_input=True)
+                    manager = get_exisiting_cm(pswd)
+
+                    if manager is not None:
+                        # Password validation success
+                        break
+                    # Otherwise retry
+                else:  # But not too many times
+                    console.print("Too many incorrect attempts.",
+                                  style="bold red")
+                    raise typer.Abort()
+
+        # Sanity check
+        assert manager is not None, 'Credential Manager not found'
+        return func(manager, *args, **kwargs)
+
+    wrapper.pbar = None  # type: ignore[attr-defined]
 
     return wrapper
