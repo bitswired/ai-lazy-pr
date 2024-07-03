@@ -19,6 +19,9 @@ def generate(repo_name: str, pr_number: int):
         TextColumn("[progress.description]{task.description}"),
         transient=True,
     ) as progress:
+        for func in (generate_pr, get_pr_diff):
+            func.pbar = progress
+
         progress.add_task(description="Getting diff...", total=None)
         pr_diff = get_pr_diff(repo_name, pr_number)
 
@@ -27,6 +30,9 @@ def generate(repo_name: str, pr_number: int):
 
         md = Markdown(res)
         console.print(md, width=90)
+
+        for func in (generate_pr, get_pr_diff):
+            func.pbar = None
 
 
 if __name__ == "__main__":
