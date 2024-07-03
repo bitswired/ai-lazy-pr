@@ -133,9 +133,9 @@ def delete_credentials() -> None:
 
     for i in range(3):
         if i == 0:
-            prompt = '\nEnter your password\n'
+            prompt = 'Enter your password'
         else:
-            prompt = f'\nEnter your password (Attempt {i+1} / 3)\n'
+            prompt = f'Enter your password (Attempt {i+1} / 3)'
 
         pswd = typer.prompt(prompt, hide_input=True)
 
